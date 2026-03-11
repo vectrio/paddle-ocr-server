@@ -120,6 +120,20 @@ else
 	pip_install_with_retry "paddleocr[all]"
 fi
 
+PADDLEX_SERVING_MARKER=".paddlex_serving_installed"
+if [ -f "${PADDLEX_SERVING_MARKER}" ]; then
+	echo "paddlex serving already installed earlier. Skipping."
+else
+	if ! command -v paddlex >/dev/null 2>&1; then
+		echo "paddlex command not found. Installing paddlex..."
+		pip_install_with_retry paddlex
+	fi
+
+	echo "Installing paddlex serving components..."
+	paddlex --install serving
+	touch "${PADDLEX_SERVING_MARKER}"
+fi
+
 if [ -d "PaddleOCR" ]; then
 	echo "PaddleOCR repository already exists. Skipping clone."
 else
@@ -221,5 +235,31 @@ ${PYTHON_CMD} tools/export_model.py -c "${EXPORT_CONFIG_PATH}" -o \
 	Global.save_inference_dir="${EXPORT_OUTPUT_DIR}"
 
 popd >/dev/null
+
+echo "Starting PaddleX serving process..."
+SERVE_WORKDIR="$(pwd)"
+PIPELINE_CONFIG_PATH="${SERVE_WORKDIR}/PP-StructureV3.yaml"
+SERVE_HOST="${SERVE_HOST:-0.0.0.0}"
+SERVE_PORT="${SERVE_PORT:-8100}"
+SERVE_SESSION_NAME="${SERVE_SESSION_NAME:-paddlex-serve}"
+
+if [ ! -f "${PIPELINE_CONFIG_PATH}" ]; then
+	echo "Pipeline config not found at ${PIPELINE_CONFIG_PATH}"
+	exit 1
+fi
+
+if command -v tmux >/dev/null 2>&1; then
+	if tmux has-session -t "${SERVE_SESSION_NAME}" 2>/dev/null; then
+		echo "tmux session '${SERVE_SESSION_NAME}' already exists. Skipping server start."
+	else
+		tmux new-session -d -s "${SERVE_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\""
+		echo "Started server in tmux session '${SERVE_SESSION_NAME}'."
+	fi
+	echo "Attach using: tmux attach -t ${SERVE_SESSION_NAME}"
+else
+	echo "tmux not found. Starting server with nohup fallback..."
+	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\"" > paddlex-serve.log 2>&1 &
+	echo "Started server with nohup. Logs: ${SERVE_WORKDIR}/paddlex-serve.log"
+fi
 
 echo "Setup complete."
