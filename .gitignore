@@ -6,3 +6,5 @@
 tmp
 venv
 .env
+model
+ft-paddle-ocr

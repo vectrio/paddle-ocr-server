@@ -192,4 +192,34 @@ hf auth login --token "${HF_TOKEN}" --add-to-git-credential
 echo "Downloading model ${HF_MODEL_REPO} into model/..."
 hf download "${HF_MODEL_REPO}" --repo-type model --local-dir model
 
+echo "Exporting inference model to ft-paddle-ocr/..."
+PADDLEOCR_DIR="$(pwd)/PaddleOCR"
+PRETRAINED_MODEL_PATH="$(pwd)/model/best_model/model.pdparams"
+EXPORT_OUTPUT_DIR="$(pwd)/ft-paddle-ocr"
+EXPORT_CONFIG_PATH="configs/table/SLANet_plus.yml"
+
+if [ ! -d "${PADDLEOCR_DIR}" ]; then
+	echo "PaddleOCR directory not found at ${PADDLEOCR_DIR}"
+	exit 1
+fi
+
+if [ ! -f "${PRETRAINED_MODEL_PATH}" ]; then
+	echo "Pretrained model file not found at ${PRETRAINED_MODEL_PATH}"
+	exit 1
+fi
+
+pushd "${PADDLEOCR_DIR}" >/dev/null
+
+if [ ! -f "${EXPORT_CONFIG_PATH}" ]; then
+	echo "Export config not found at ${PADDLEOCR_DIR}/${EXPORT_CONFIG_PATH}"
+	popd >/dev/null
+	exit 1
+fi
+
+${PYTHON_CMD} tools/export_model.py -c "${EXPORT_CONFIG_PATH}" -o \
+	Global.pretrained_model="${PRETRAINED_MODEL_PATH}" \
+	Global.save_inference_dir="${EXPORT_OUTPUT_DIR}"
+
+popd >/dev/null
+
 echo "Setup complete."
