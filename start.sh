@@ -69,6 +69,48 @@ else
 	exit 1
 fi
 
+if command -v python >/dev/null 2>&1; then
+	PYTHON_CMD="python"
+elif command -v python3 >/dev/null 2>&1; then
+	PYTHON_CMD="python3"
+else
+	echo "No python executable found in active virtual environment."
+	exit 1
+fi
+
+echo "Installing Paddle dependencies in virtual environment..."
+
+PADDLE_GPU_VERSION_INSTALLED="$(${PYTHON_CMD} -m pip show paddlepaddle-gpu 2>/dev/null | awk '/^Version:/{print $2}')"
+if [ "${PADDLE_GPU_VERSION_INSTALLED}" = "3.3.0" ]; then
+	echo "paddlepaddle-gpu==3.3.0 already installed. Skipping."
+else
+	echo "Installing paddlepaddle-gpu==3.3.0"
+	${PYTHON_CMD} -m pip install paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu130/
+fi
+
+if ${PYTHON_CMD} -m pip show paddleocr >/dev/null 2>&1; then
+	echo "paddleocr already installed. Skipping paddleocr[all] install."
+else
+	echo "Installing paddleocr[all]"
+	${PYTHON_CMD} -m pip install "paddleocr[all]"
+fi
+
+if [ -d "PaddleOCR" ]; then
+	echo "PaddleOCR repository already exists. Skipping clone."
+else
+	echo "Cloning PaddleOCR repository..."
+	git clone https://github.com/PaddlePaddle/PaddleOCR.git
+fi
+
+REQ_MARKER="PaddleOCR/.requirements_installed"
+if [ -f "${REQ_MARKER}" ]; then
+	echo "PaddleOCR requirements already installed earlier. Skipping."
+else
+	echo "Installing PaddleOCR requirements from PaddleOCR/requirements.txt"
+	${PYTHON_CMD} -m pip install -r PaddleOCR/requirements.txt
+	touch "${REQ_MARKER}"
+fi
+
 if [ -f ".env" ]; then
 	echo "Loading .env file..."
 	set -a
