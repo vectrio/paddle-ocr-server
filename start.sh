@@ -80,7 +80,7 @@ fi
 
 echo "Installing Paddle dependencies in virtual environment..."
 
-PADDLE_GPU_VERSION_INSTALLED="$(${PYTHON_CMD} -m pip show paddlepaddle-gpu 2>/dev/null | awk '/^Version:/{print $2}')"
+PADDLE_GPU_VERSION_INSTALLED="$(${PYTHON_CMD} -m pip show paddlepaddle-gpu 2>/dev/null | awk '/^Version:/{print $2}' || true)"
 if [ "${PADDLE_GPU_VERSION_INSTALLED}" = "3.3.0" ]; then
 	echo "paddlepaddle-gpu==3.3.0 already installed. Skipping."
 else
