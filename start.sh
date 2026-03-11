@@ -59,4 +59,28 @@ else
 	echo "Created directory: ft-paddle-ocr"
 fi
 
+echo "Preparing Hugging Face private model download..."
+if ! command -v huggingface-cli >/dev/null 2>&1; then
+	echo "huggingface-cli is not installed. Install it first and rerun."
+	exit 1
+fi
+
+if [ -z "${HF_TOKEN:-}" ]; then
+	echo "HF_TOKEN is not set. Export your Hugging Face token and rerun."
+	echo "Example: export HF_TOKEN='hf_xxx'"
+	exit 1
+fi
+
+if [ -z "${HF_MODEL_REPO:-}" ]; then
+	echo "HF_MODEL_REPO is not set. Export your model repo id and rerun."
+	echo "Example: export HF_MODEL_REPO='org-or-user/private-model-repo'"
+	exit 1
+fi
+
+echo "Logging in to Hugging Face CLI..."
+huggingface-cli login --token "${HF_TOKEN}" --add-to-git-credential
+
+echo "Downloading model ${HF_MODEL_REPO} into model/..."
+huggingface-cli download "${HF_MODEL_REPO}" --repo-type model --local-dir model
+
 echo "Setup complete."
