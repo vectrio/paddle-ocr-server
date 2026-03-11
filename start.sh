@@ -61,8 +61,14 @@ fi
 
 echo "Preparing Hugging Face private model download..."
 if ! command -v hf >/dev/null 2>&1; then
-	echo "hf CLI is not installed. Install it first and rerun."
-	exit 1
+	echo "hf CLI is not installed. Installing huggingface_hub CLI..."
+	sudo python3 -m pip install --upgrade "huggingface_hub[cli]"
+
+	if ! command -v hf >/dev/null 2>&1; then
+		echo "hf CLI install completed but command is still unavailable in PATH."
+		echo "Try reopening the shell or adding the Python scripts path to PATH."
+		exit 1
+	fi
 fi
 
 if [ -z "${HF_TOKEN:-}" ]; then
