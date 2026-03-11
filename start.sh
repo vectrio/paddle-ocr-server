@@ -60,13 +60,22 @@ else
 fi
 
 echo "Preparing Hugging Face private model download..."
+if [ -f "venv/bin/activate" ]; then
+	echo "Activating virtual environment..."
+	# shellcheck disable=SC1091
+	source venv/bin/activate
+else
+	echo "venv activation script not found at venv/bin/activate"
+	exit 1
+fi
+
 if ! command -v hf >/dev/null 2>&1; then
 	echo "hf CLI is not installed. Installing huggingface_hub CLI..."
-	sudo python3 -m pip install --upgrade "huggingface_hub[cli]"
+	python -m pip install --upgrade "huggingface_hub[cli]"
 
 	if ! command -v hf >/dev/null 2>&1; then
 		echo "hf CLI install completed but command is still unavailable in PATH."
-		echo "Try reopening the shell or adding the Python scripts path to PATH."
+		echo "Try checking venv/bin is in PATH after activation."
 		exit 1
 	fi
 fi
