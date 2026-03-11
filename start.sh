@@ -44,6 +44,16 @@ else
 	fi
 fi
 
+if ! ./venv/bin/python -m pip --version >/dev/null 2>&1; then
+	echo "pip is missing in virtual environment. Bootstrapping with ensurepip..."
+	if ! ./venv/bin/python -m ensurepip --upgrade; then
+		echo "ensurepip failed in existing venv. Recreating virtual environment..."
+		rm -rf venv
+		python3 -m venv venv
+		./venv/bin/python -m ensurepip --upgrade
+	fi
+fi
+
 echo "Upgrading pip inside virtual environment..."
 ./venv/bin/python -m pip install --upgrade pip
 
