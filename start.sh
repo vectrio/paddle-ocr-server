@@ -60,8 +60,8 @@ else
 fi
 
 echo "Preparing Hugging Face private model download..."
-if ! command -v huggingface-cli >/dev/null 2>&1; then
-	echo "huggingface-cli is not installed. Install it first and rerun."
+if ! command -v hf >/dev/null 2>&1; then
+	echo "hf CLI is not installed. Install it first and rerun."
 	exit 1
 fi
 
@@ -78,9 +78,9 @@ if [ -z "${HF_MODEL_REPO:-}" ]; then
 fi
 
 echo "Logging in to Hugging Face CLI..."
-huggingface-cli login --token "${HF_TOKEN}" --add-to-git-credential
+hf auth login --token "${HF_TOKEN}" --add-to-git-credential
 
 echo "Downloading model ${HF_MODEL_REPO} into model/..."
-huggingface-cli download "${HF_MODEL_REPO}" --repo-type model --local-dir model
+hf download "${HF_MODEL_REPO}" --repo-type model --local-dir model
 
 echo "Setup complete."
