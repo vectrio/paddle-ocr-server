@@ -33,7 +33,15 @@ if [ -d "venv" ]; then
 	echo "Virtual environment 'venv' already exists. Skipping creation."
 else
 	echo "Creating virtual environment: venv"
-	python3 -m venv venv
+	if ! python3 -m venv venv; then
+		echo "Initial venv creation failed. Trying version-specific venv package..."
+		py_minor="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+		venv_pkg="python${py_minor}-venv"
+		echo "Installing ${venv_pkg}"
+		sudo apt-get install -y "${venv_pkg}"
+		echo "Retrying virtual environment creation..."
+		python3 -m venv venv
+	fi
 fi
 
 echo "Upgrading pip inside virtual environment..."
