@@ -69,6 +69,16 @@ else
 	exit 1
 fi
 
+if [ -f ".env" ]; then
+	echo "Loading .env file..."
+	set -a
+	# shellcheck disable=SC1091
+	source .env
+	set +a
+else
+	echo ".env file not found. It will be created if token is provided."
+fi
+
 if ! command -v hf >/dev/null 2>&1; then
 	echo "hf CLI is not installed. Installing huggingface_hub CLI..."
 	python -m pip install --upgrade "huggingface_hub[cli]"
@@ -81,9 +91,29 @@ if ! command -v hf >/dev/null 2>&1; then
 fi
 
 if [ -z "${HF_TOKEN:-}" ]; then
-	echo "HF_TOKEN is not set. Export your Hugging Face token and rerun."
-	echo "Example: export HF_TOKEN='hf_xxx'"
-	exit 1
+	echo "HF_TOKEN is not set in environment or .env."
+	read -r -s -p "Enter Hugging Face token: " HF_TOKEN_INPUT
+	echo
+
+	if [ -z "${HF_TOKEN_INPUT}" ]; then
+		echo "No token provided. Exiting."
+		exit 1
+	fi
+
+	HF_TOKEN="${HF_TOKEN_INPUT}"
+	export HF_TOKEN
+
+	if [ -f ".env" ]; then
+		if grep -q '^HF_TOKEN=' .env; then
+			sed -i "s|^HF_TOKEN=.*|HF_TOKEN=${HF_TOKEN}|" .env
+		else
+			echo "HF_TOKEN=${HF_TOKEN}" >> .env
+		fi
+	else
+		printf 'HF_TOKEN=%s\n' "${HF_TOKEN}" > .env
+	fi
+
+	echo "HF_TOKEN saved to .env"
 fi
 
 if [ -z "${HF_MODEL_REPO:-}" ]; then
