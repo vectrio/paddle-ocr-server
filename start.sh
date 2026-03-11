@@ -78,6 +78,31 @@ else
 	exit 1
 fi
 
+pip_install_with_retry() {
+	local max_attempts=3
+	local attempt=1
+	local pip_timeout_seconds="${PIP_TIMEOUT_SECONDS:-900}"
+	local pip_retries="${PIP_RETRIES:-15}"
+	local retry_sleep_seconds="${PIP_RETRY_SLEEP_SECONDS:-20}"
+
+	while [ ${attempt} -le ${max_attempts} ]; do
+		echo "pip install attempt ${attempt}/${max_attempts} (timeout=${pip_timeout_seconds}s, retries=${pip_retries}): $*"
+		if ${PYTHON_CMD} -m pip --default-timeout "${pip_timeout_seconds}" --retries "${pip_retries}" install "$@"; then
+			return 0
+		fi
+
+		if [ ${attempt} -lt ${max_attempts} ]; then
+			echo "pip install failed. Retrying in ${retry_sleep_seconds} seconds..."
+			sleep "${retry_sleep_seconds}"
+		fi
+
+		attempt=$((attempt + 1))
+	done
+
+	echo "pip install failed after ${max_attempts} attempts."
+	return 1
+}
+
 echo "Installing Paddle dependencies in virtual environment..."
 
 PADDLE_GPU_VERSION_INSTALLED="$(${PYTHON_CMD} -m pip show paddlepaddle-gpu 2>/dev/null | awk '/^Version:/{print $2}' || true)"
@@ -85,14 +110,14 @@ if [ "${PADDLE_GPU_VERSION_INSTALLED}" = "3.3.0" ]; then
 	echo "paddlepaddle-gpu==3.3.0 already installed. Skipping."
 else
 	echo "Installing paddlepaddle-gpu==3.3.0"
-	${PYTHON_CMD} -m pip install paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu130/
+	pip_install_with_retry paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu130/
 fi
 
 if ${PYTHON_CMD} -m pip show paddleocr >/dev/null 2>&1; then
 	echo "paddleocr already installed. Skipping paddleocr[all] install."
 else
 	echo "Installing paddleocr[all]"
-	${PYTHON_CMD} -m pip install "paddleocr[all]"
+	pip_install_with_retry "paddleocr[all]"
 fi
 
 if [ -d "PaddleOCR" ]; then
@@ -107,7 +132,7 @@ if [ -f "${REQ_MARKER}" ]; then
 	echo "PaddleOCR requirements already installed earlier. Skipping."
 else
 	echo "Installing PaddleOCR requirements from PaddleOCR/requirements.txt"
-	${PYTHON_CMD} -m pip install -r PaddleOCR/requirements.txt
+	pip_install_with_retry -r PaddleOCR/requirements.txt
 	touch "${REQ_MARKER}"
 fi
 
@@ -123,7 +148,7 @@ fi
 
 if ! command -v hf >/dev/null 2>&1; then
 	echo "hf CLI is not installed. Installing huggingface_hub CLI..."
-	python -m pip install --upgrade "huggingface_hub[cli]"
+	pip_install_with_retry --upgrade "huggingface_hub[cli]"
 
 	if ! command -v hf >/dev/null 2>&1; then
 		echo "hf CLI install completed but command is still unavailable in PATH."
