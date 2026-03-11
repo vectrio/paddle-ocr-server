@@ -116,11 +116,8 @@ if [ -z "${HF_TOKEN:-}" ]; then
 	echo "HF_TOKEN saved to .env"
 fi
 
-if [ -z "${HF_MODEL_REPO:-AnuragKatkar/FT-Paddle-OCR}" ]; then
-	echo "HF_MODEL_REPO is not set. Export your model repo id and rerun."
-	echo "Example: export HF_MODEL_REPO='org-or-user/private-model-repo'"
-	exit 1
-fi
+HF_MODEL_REPO="${HF_MODEL_REPO:-AnuragKatkar/FT-Paddle-OCR}"
+echo "Using HF_MODEL_REPO=${HF_MODEL_REPO}"
 
 echo "Logging in to Hugging Face CLI..."
 hf auth login --token "${HF_TOKEN}" --add-to-git-credential
