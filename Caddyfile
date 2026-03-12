@@ -1,0 +1,26 @@
+{
+  email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+  encode zstd gzip
+
+  # Basic hardening headers for API responses.
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy no-referrer
+    Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  }
+
+  # Guardrails for large payload abuse.
+  request_body {
+    max_size 25MB
+  }
+
+  reverse_proxy host.docker.internal:8100 {
+    health_uri /
+    health_interval 30s
+    health_timeout 5s
+  }
+}
