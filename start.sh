@@ -110,7 +110,7 @@ if [ "${PADDLE_GPU_VERSION_INSTALLED}" = "3.3.0" ]; then
 	echo "paddlepaddle-gpu==3.3.0 already installed. Skipping."
 else
 	echo "Installing paddlepaddle-gpu==3.3.0"
-	pip_install_with_retry paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu130/
+	pip_install_with_retry paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
 fi
 
 if ${PYTHON_CMD} -m pip show paddleocr >/dev/null 2>&1; then
