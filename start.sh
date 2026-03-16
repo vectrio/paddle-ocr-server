@@ -252,13 +252,13 @@ if command -v tmux >/dev/null 2>&1; then
 	if tmux has-session -t "${SERVE_SESSION_NAME}" 2>/dev/null; then
 		echo "tmux session '${SERVE_SESSION_NAME}' already exists. Skipping server start."
 	else
-		tmux new-session -d -s "${SERVE_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\" --use_hpip"
+		tmux new-session -d -s "${SERVE_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\""
 		echo "Started server in tmux session '${SERVE_SESSION_NAME}'."
 	fi
 	echo "Attach using: tmux attach -t ${SERVE_SESSION_NAME}"
 else
 	echo "tmux not found. Starting server with nohup fallback..."
-	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\" --use_hpip" > paddlex-serve.log 2>&1 &
+	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\"" > paddlex-serve.log 2>&1 &
 	echo "Started server with nohup. Logs: ${SERVE_WORKDIR}/paddlex-serve.log"
 fi
 
