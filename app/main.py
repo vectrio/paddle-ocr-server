@@ -42,7 +42,7 @@ def filter_headers(headers: Iterable[tuple[str, str]]) -> Dict[str, str]:
 RAW_UPSTREAM_URLS = os.getenv("UPSTREAM_URLS", "http://127.0.0.1:8101,http://127.0.0.1:8102")
 UPSTREAM_URLS = parse_upstream_urls(RAW_UPSTREAM_URLS)
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
-QUEUE_WAIT_TIMEOUT_SECONDS = float(os.getenv("QUEUE_WAIT_TIMEOUT_SECONDS", "2.5"))
+QUEUE_WAIT_TIMEOUT_SECONDS = float(os.getenv("QUEUE_WAIT_TIMEOUT_SECONDS", "0"))
 MAX_IN_FLIGHT = int(os.getenv("MAX_IN_FLIGHT", "64"))
 
 app = FastAPI(title="PaddleX FastAPI Gateway", version="1.0.0")
@@ -88,13 +88,16 @@ async def proxy(full_path: str, request: Request) -> Response:
     request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
 
     try:
-        await asyncio.wait_for(app.state.semaphore.acquire(), timeout=QUEUE_WAIT_TIMEOUT_SECONDS)
-    except TimeoutError:
+        if QUEUE_WAIT_TIMEOUT_SECONDS > 0:
+            await asyncio.wait_for(app.state.semaphore.acquire(), timeout=QUEUE_WAIT_TIMEOUT_SECONDS)
+        else:
+            await app.state.semaphore.acquire()
+    except asyncio.TimeoutError:
         return JSONResponse(
             status_code=429,
             content={
                 "error": "server_busy",
-                "message": "Too many in-flight requests. Retry shortly.",
+                "message": "Too many in-flight requests. Queue wait timeout exceeded.",
                 "request_id": request_id,
             },
             headers={"x-request-id": request_id},

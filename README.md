@@ -44,7 +44,7 @@ chmod +x start.sh
 - `PADDLEX_WORKER_HOST` (default: `127.0.0.1`)
 - `PADDLEX_WORKER_PORTS` (default: `8101,8102`)
 - `MAX_IN_FLIGHT` (default: `64`)
-- `QUEUE_WAIT_TIMEOUT_SECONDS` (default: `2.5`)
+- `QUEUE_WAIT_TIMEOUT_SECONDS` (default: `0`, where `0` means wait indefinitely)
 - `REQUEST_TIMEOUT_SECONDS` (default: `180`)
 - `CLOUDFLARE_ENABLE_TUNNEL` (default: `false`)
 - `CLOUDFLARE_SESSION_NAME` (default: `cloudflare-tunnel`)
@@ -96,3 +96,5 @@ tmux capture-pane -pt cloudflare-tunnel | grep -Eo 'https://[-a-zA-Z0-9]+\.trycl
 
 - Keep your clients pointed to the gateway port (`8100` by default).
 - Scale worker count conservatively on a single GPU to avoid OOM.
+- To avoid `429 Too Many Requests`, keep `QUEUE_WAIT_TIMEOUT_SECONDS=0`.
+- Set `QUEUE_WAIT_TIMEOUT_SECONDS` to a positive value only if you prefer bounded wait and overload rejections.
