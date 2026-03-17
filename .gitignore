@@ -8,3 +8,6 @@ venv
 model
 ft-paddle-ocr
 PaddleOCR
+.paddlex_serving_installed
+app/__pycache__/
+cloudflared
