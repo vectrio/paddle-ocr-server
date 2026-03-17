@@ -2,7 +2,6 @@
 *.json
 *.png
 *.ipynb
-*.py
 tmp
 venv
 .env

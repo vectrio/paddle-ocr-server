@@ -120,6 +120,13 @@ else
 	pip_install_with_retry "paddleocr[all]"
 fi
 
+if ${PYTHON_CMD} -m pip show fastapi >/dev/null 2>&1 && ${PYTHON_CMD} -m pip show uvicorn >/dev/null 2>&1 && ${PYTHON_CMD} -m pip show httpx >/dev/null 2>&1; then
+	echo "fastapi, uvicorn, and httpx already installed. Skipping."
+else
+	echo "Installing FastAPI gateway dependencies (fastapi, uvicorn, httpx)..."
+	pip_install_with_retry fastapi uvicorn httpx
+fi
+
 PADDLEX_SERVING_MARKER=".paddlex_serving_installed"
 if [ -f "${PADDLEX_SERVING_MARKER}" ]; then
 	echo "paddlex serving already installed earlier. Skipping."
@@ -236,30 +243,89 @@ ${PYTHON_CMD} tools/export_model.py -c "${EXPORT_CONFIG_PATH}" -o \
 
 popd >/dev/null
 
-echo "Starting PaddleX serving process..."
+echo "Starting PaddleX workers and FastAPI gateway..."
 SERVE_WORKDIR="$(pwd)"
 PIPELINE_CONFIG_PATH="${SERVE_WORKDIR}/PP-StructureV3.yaml"
-SERVE_HOST="${SERVE_HOST:-0.0.0.0}"
-SERVE_PORT="${SERVE_PORT:-8100}"
-SERVE_SESSION_NAME="${SERVE_SESSION_NAME:-paddlex-serve}"
+PADDLEX_WORKER_HOST="${PADDLEX_WORKER_HOST:-127.0.0.1}"
+PADDLEX_WORKER_PORTS="${PADDLEX_WORKER_PORTS:-8101,8102}"
+PADDLEX_WORKER_SESSION_PREFIX="${PADDLEX_WORKER_SESSION_PREFIX:-paddlex-worker}"
+
+GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
+GATEWAY_PORT="${GATEWAY_PORT:-8100}"
+GATEWAY_SESSION_NAME="${GATEWAY_SESSION_NAME:-paddlex-gateway}"
+
+MAX_IN_FLIGHT="${MAX_IN_FLIGHT:-64}"
+QUEUE_WAIT_TIMEOUT_SECONDS="${QUEUE_WAIT_TIMEOUT_SECONDS:-2.5}"
+REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-180}"
 
 if [ ! -f "${PIPELINE_CONFIG_PATH}" ]; then
 	echo "Pipeline config not found at ${PIPELINE_CONFIG_PATH}"
 	exit 1
 fi
 
-if command -v tmux >/dev/null 2>&1; then
-	if tmux has-session -t "${SERVE_SESSION_NAME}" 2>/dev/null; then
-		echo "tmux session '${SERVE_SESSION_NAME}' already exists. Skipping server start."
-	else
-		tmux new-session -d -s "${SERVE_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\""
-		echo "Started server in tmux session '${SERVE_SESSION_NAME}'."
+IFS=',' read -r -a WORKER_PORT_ARRAY <<< "${PADDLEX_WORKER_PORTS}"
+if [ ${#WORKER_PORT_ARRAY[@]} -eq 0 ]; then
+	echo "No worker ports configured. Set PADDLEX_WORKER_PORTS, e.g. 8101,8102"
+	exit 1
+fi
+
+UPSTREAM_URLS=""
+for WORKER_PORT_RAW in "${WORKER_PORT_ARRAY[@]}"; do
+	WORKER_PORT="$(echo "${WORKER_PORT_RAW}" | xargs)"
+	if [ -z "${WORKER_PORT}" ]; then
+		continue
 	fi
-	echo "Attach using: tmux attach -t ${SERVE_SESSION_NAME}"
+
+	UPSTREAM_URL="http://${PADDLEX_WORKER_HOST}:${WORKER_PORT}"
+	if [ -z "${UPSTREAM_URLS}" ]; then
+		UPSTREAM_URLS="${UPSTREAM_URL}"
+	else
+		UPSTREAM_URLS="${UPSTREAM_URLS},${UPSTREAM_URL}"
+	fi
+done
+
+if [ -z "${UPSTREAM_URLS}" ]; then
+	echo "Failed to derive upstream URLs from PADDLEX_WORKER_PORTS=${PADDLEX_WORKER_PORTS}"
+	exit 1
+fi
+
+if command -v tmux >/dev/null 2>&1; then
+	for WORKER_PORT_RAW in "${WORKER_PORT_ARRAY[@]}"; do
+		WORKER_PORT="$(echo "${WORKER_PORT_RAW}" | xargs)"
+		if [ -z "${WORKER_PORT}" ]; then
+			continue
+		fi
+
+		WORKER_SESSION_NAME="${PADDLEX_WORKER_SESSION_PREFIX}-${WORKER_PORT}"
+		if tmux has-session -t "${WORKER_SESSION_NAME}" 2>/dev/null; then
+			echo "tmux session '${WORKER_SESSION_NAME}' already exists. Skipping worker start."
+		else
+			tmux new-session -d -s "${WORKER_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${PADDLEX_WORKER_HOST}\" --port \"${WORKER_PORT}\""
+			echo "Started PaddleX worker in tmux session '${WORKER_SESSION_NAME}' on ${PADDLEX_WORKER_HOST}:${WORKER_PORT}."
+		fi
+		echo "Attach using: tmux attach -t ${WORKER_SESSION_NAME}"
+	done
+
+	if tmux has-session -t "${GATEWAY_SESSION_NAME}" 2>/dev/null; then
+		echo "tmux session '${GATEWAY_SESSION_NAME}' already exists. Skipping gateway start."
+	else
+		tmux new-session -d -s "${GATEWAY_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && UPSTREAM_URLS=\"${UPSTREAM_URLS}\" MAX_IN_FLIGHT=\"${MAX_IN_FLIGHT}\" QUEUE_WAIT_TIMEOUT_SECONDS=\"${QUEUE_WAIT_TIMEOUT_SECONDS}\" REQUEST_TIMEOUT_SECONDS=\"${REQUEST_TIMEOUT_SECONDS}\" uvicorn app.main:app --host \"${GATEWAY_HOST}\" --port \"${GATEWAY_PORT}\""
+		echo "Started FastAPI gateway in tmux session '${GATEWAY_SESSION_NAME}' on ${GATEWAY_HOST}:${GATEWAY_PORT}."
+	fi
+	echo "Attach using: tmux attach -t ${GATEWAY_SESSION_NAME}"
 else
-	echo "tmux not found. Starting server with nohup fallback..."
-	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${SERVE_HOST}\" --port \"${SERVE_PORT}\"" > paddlex-serve.log 2>&1 &
-	echo "Started server with nohup. Logs: ${SERVE_WORKDIR}/paddlex-serve.log"
+	echo "tmux not found. Starting workers and gateway with nohup fallback..."
+	for WORKER_PORT_RAW in "${WORKER_PORT_ARRAY[@]}"; do
+		WORKER_PORT="$(echo "${WORKER_PORT_RAW}" | xargs)"
+		if [ -z "${WORKER_PORT}" ]; then
+			continue
+		fi
+		nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && paddlex --serve --pipeline \"${PIPELINE_CONFIG_PATH}\" --host \"${PADDLEX_WORKER_HOST}\" --port \"${WORKER_PORT}\"" > "paddlex-worker-${WORKER_PORT}.log" 2>&1 &
+		echo "Started PaddleX worker on ${PADDLEX_WORKER_HOST}:${WORKER_PORT}. Logs: ${SERVE_WORKDIR}/paddlex-worker-${WORKER_PORT}.log"
+	done
+
+	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && UPSTREAM_URLS=\"${UPSTREAM_URLS}\" MAX_IN_FLIGHT=\"${MAX_IN_FLIGHT}\" QUEUE_WAIT_TIMEOUT_SECONDS=\"${QUEUE_WAIT_TIMEOUT_SECONDS}\" REQUEST_TIMEOUT_SECONDS=\"${REQUEST_TIMEOUT_SECONDS}\" uvicorn app.main:app --host \"${GATEWAY_HOST}\" --port \"${GATEWAY_PORT}\"" > paddlex-gateway.log 2>&1 &
+	echo "Started FastAPI gateway on ${GATEWAY_HOST}:${GATEWAY_PORT}. Logs: ${SERVE_WORKDIR}/paddlex-gateway.log"
 fi
 
 echo "Setup complete."
