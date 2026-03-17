@@ -258,6 +258,13 @@ MAX_IN_FLIGHT="${MAX_IN_FLIGHT:-64}"
 QUEUE_WAIT_TIMEOUT_SECONDS="${QUEUE_WAIT_TIMEOUT_SECONDS:-2.5}"
 REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-180}"
 
+CLOUDFLARE_ENABLE_TUNNEL="${CLOUDFLARE_ENABLE_TUNNEL:-false}"
+CLOUDFLARE_SESSION_NAME="${CLOUDFLARE_SESSION_NAME:-cloudflare-tunnel}"
+CLOUDFLARE_TUNNEL_URL_TARGET="${CLOUDFLARE_TUNNEL_URL_TARGET:-http://localhost:${GATEWAY_PORT}}"
+CLOUDFLARED_BINARY_NAME="${CLOUDFLARED_BINARY_NAME:-cloudflared}"
+CLOUDFLARED_DOWNLOAD_URL="${CLOUDFLARED_DOWNLOAD_URL:-https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64}"
+CLOUDFLARE_LOG_FILE="${CLOUDFLARE_LOG_FILE:-cloudflared.log}"
+
 if [ ! -f "${PIPELINE_CONFIG_PATH}" ]; then
 	echo "Pipeline config not found at ${PIPELINE_CONFIG_PATH}"
 	exit 1
@@ -326,6 +333,26 @@ else
 
 	nohup bash -lc "cd \"${SERVE_WORKDIR}\" && source venv/bin/activate && UPSTREAM_URLS=\"${UPSTREAM_URLS}\" MAX_IN_FLIGHT=\"${MAX_IN_FLIGHT}\" QUEUE_WAIT_TIMEOUT_SECONDS=\"${QUEUE_WAIT_TIMEOUT_SECONDS}\" REQUEST_TIMEOUT_SECONDS=\"${REQUEST_TIMEOUT_SECONDS}\" uvicorn app.main:app --host \"${GATEWAY_HOST}\" --port \"${GATEWAY_PORT}\"" > paddlex-gateway.log 2>&1 &
 	echo "Started FastAPI gateway on ${GATEWAY_HOST}:${GATEWAY_PORT}. Logs: ${SERVE_WORKDIR}/paddlex-gateway.log"
+fi
+
+if [ "${CLOUDFLARE_ENABLE_TUNNEL}" = "true" ]; then
+	echo "Cloudflare tunnel is enabled. Preparing tunnel startup..."
+	if ! command -v tmux >/dev/null 2>&1; then
+		echo "tmux is required for cloudflare tunnel session. Skipping tunnel start."
+	else
+		if tmux has-session -t "${CLOUDFLARE_SESSION_NAME}" 2>/dev/null; then
+			echo "tmux session '${CLOUDFLARE_SESSION_NAME}' already exists. Skipping cloudflare tunnel start."
+		else
+			tmux new-session -d -s "${CLOUDFLARE_SESSION_NAME}" "cd \"${SERVE_WORKDIR}\" && if [ ! -x \"${CLOUDFLARED_BINARY_NAME}\" ]; then echo 'Downloading cloudflared...'; wget -O \"${CLOUDFLARED_BINARY_NAME}\" \"${CLOUDFLARED_DOWNLOAD_URL}\" && chmod +x \"${CLOUDFLARED_BINARY_NAME}\"; fi && ./\"${CLOUDFLARED_BINARY_NAME}\" tunnel --url \"${CLOUDFLARE_TUNNEL_URL_TARGET}\" 2>&1 | tee \"${CLOUDFLARE_LOG_FILE}\""
+			echo "Started cloudflare tunnel in tmux session '${CLOUDFLARE_SESSION_NAME}'."
+		fi
+
+		echo "Attach using: tmux attach -t ${CLOUDFLARE_SESSION_NAME}"
+		echo "Tunnel URL target: ${CLOUDFLARE_TUNNEL_URL_TARGET}"
+		echo "Try getting public URL with: tmux capture-pane -pt ${CLOUDFLARE_SESSION_NAME} | grep -Eo 'https://[-a-zA-Z0-9]+\\.trycloudflare\\.com' | tail -n 1"
+	fi
+else
+	echo "Cloudflare tunnel is disabled. Set CLOUDFLARE_ENABLE_TUNNEL=true to start it automatically."
 fi
 
 echo "Setup complete."

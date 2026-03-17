@@ -46,6 +46,12 @@ chmod +x start.sh
 - `MAX_IN_FLIGHT` (default: `64`)
 - `QUEUE_WAIT_TIMEOUT_SECONDS` (default: `2.5`)
 - `REQUEST_TIMEOUT_SECONDS` (default: `180`)
+- `CLOUDFLARE_ENABLE_TUNNEL` (default: `false`)
+- `CLOUDFLARE_SESSION_NAME` (default: `cloudflare-tunnel`)
+- `CLOUDFLARE_TUNNEL_URL_TARGET` (default: `http://localhost:${GATEWAY_PORT}`)
+- `CLOUDFLARED_BINARY_NAME` (default: `cloudflared`)
+- `CLOUDFLARED_DOWNLOAD_URL` (default: latest Linux amd64 release URL)
+- `CLOUDFLARE_LOG_FILE` (default: `cloudflared.log`)
 
 Example for higher concurrency:
 
@@ -55,11 +61,19 @@ export MAX_IN_FLIGHT=96
 ./start.sh
 ```
 
+Example with auto Cloudflare tunnel:
+
+```bash
+export CLOUDFLARE_ENABLE_TUNNEL=true
+./start.sh
+```
+
 ## Process Management
 
 - If `tmux` is available:
   - workers run in sessions named `paddlex-worker-<port>`
   - gateway runs in session `paddlex-gateway`
+  - optional cloudflare tunnel runs in session `cloudflare-tunnel`
 - Without `tmux`, `nohup` is used and logs are written to:
   - `paddlex-worker-<port>.log`
   - `paddlex-gateway.log`
@@ -70,6 +84,12 @@ Gateway health endpoint:
 
 ```bash
 curl http://127.0.0.1:8100/health
+```
+
+If cloudflare tunnel is enabled, get public URL:
+
+```bash
+tmux capture-pane -pt cloudflare-tunnel | grep -Eo 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' | tail -n 1
 ```
 
 ## Notes
