@@ -117,6 +117,8 @@ Defaults:
 - `OUTPUT_ROOT=./quantized-models`
 - `WEIGHT_BITS=8`
 - `QUANT_OPS=conv2d,depthwise_conv2d,mul,matmul`
+- `AUTO_INSTALL_QUANT_DEPS=true`
+- `PADDLESLIM_INSTALL_FLAGS=--no-deps` (prevents unintended dependency downgrades such as opencv)
 
 Optional examples:
 
@@ -133,6 +135,13 @@ export EXTRA_MODEL_DIRS=/path/modelA,/path/modelB
 ./quantize.sh
 ```
 
+Disable auto dependency install (strict mode):
+
+```bash
+export AUTO_INSTALL_QUANT_DEPS=false
+./quantize.sh
+```
+
 Result summary is written to:
 
 - `quantized-models/quantization_summary.json` (or your custom `OUTPUT_ROOT`)
@@ -140,4 +149,5 @@ Result summary is written to:
 Notes:
 
 - Modules with `model_dir: null` are skipped because they do not point to local inference model files.
+- If inference files are not at the model_dir root, the script now searches recursively and picks a nested folder containing matching `.pdmodel` and `.pdiparams` files.
 - This script performs dynamic post-training quantization and outputs separate quantized model folders.

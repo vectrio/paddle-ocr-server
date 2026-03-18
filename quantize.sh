@@ -24,14 +24,35 @@ if ! ${PYTHON_CMD} -m pip --version >/dev/null 2>&1; then
 	exit 1
 fi
 
+AUTO_INSTALL_QUANT_DEPS="${AUTO_INSTALL_QUANT_DEPS:-true}"
+PADDLESLIM_INSTALL_FLAGS="${PADDLESLIM_INSTALL_FLAGS:---no-deps}"
+
+if [ "${AUTO_INSTALL_QUANT_DEPS}" != "true" ] && [ "${AUTO_INSTALL_QUANT_DEPS}" != "false" ]; then
+	echo "AUTO_INSTALL_QUANT_DEPS must be 'true' or 'false'."
+	exit 1
+fi
+
 if ! ${PYTHON_CMD} -c "import yaml" >/dev/null 2>&1; then
-	echo "Installing missing dependency: pyyaml"
-	${PYTHON_CMD} -m pip install pyyaml
+	if [ "${AUTO_INSTALL_QUANT_DEPS}" = "true" ]; then
+		echo "Installing missing dependency: pyyaml"
+		${PYTHON_CMD} -m pip install pyyaml
+	else
+		echo "Missing dependency: pyyaml"
+		echo "Install manually: ${PYTHON_CMD} -m pip install pyyaml"
+		exit 1
+	fi
 fi
 
 if ! ${PYTHON_CMD} -c "import paddleslim" >/dev/null 2>&1; then
-	echo "Installing missing dependency: paddleslim"
-	${PYTHON_CMD} -m pip install paddleslim
+	if [ "${AUTO_INSTALL_QUANT_DEPS}" = "true" ]; then
+		echo "Installing missing dependency: paddleslim (${PADDLESLIM_INSTALL_FLAGS})"
+		echo "Using --no-deps by default to avoid unintended package downgrades (for example opencv)."
+		${PYTHON_CMD} -m pip install ${PADDLESLIM_INSTALL_FLAGS} paddleslim
+	else
+		echo "Missing dependency: paddleslim"
+		echo "Install manually (safe default): ${PYTHON_CMD} -m pip install --no-deps paddleslim"
+		exit 1
+	fi
 fi
 
 CONFIG_PATH="${CONFIG_PATH:-${WORKDIR}/PP-StructureV3.yaml}"

@@ -62,36 +62,60 @@ def collect_model_specs(config_obj: Dict[str, Any], config_dir: str) -> List[Mod
     return specs
 
 
-def detect_model_and_params(model_dir: str) -> Tuple[Optional[str], Optional[str], List[str]]:
+def detect_model_and_params(model_dir: str) -> Tuple[Optional[str], Optional[str], Optional[str], List[str]]:
     warnings: List[str] = []
     path_obj = pathlib.Path(model_dir)
     if not path_obj.exists() or not path_obj.is_dir():
         warnings.append("model_dir does not exist")
-        return None, None, warnings
+        return None, None, None, warnings
+
+    def select_model_pair(base_dir: pathlib.Path, model_files: List[pathlib.Path], params_files: List[pathlib.Path]) -> Tuple[Optional[str], Optional[str], List[str]]:
+        local_warnings: List[str] = []
+
+        if not model_files:
+            local_warnings.append("no .pdmodel file found")
+            return None, None, local_warnings
+        if not params_files:
+            local_warnings.append("no .pdiparams file found")
+            return None, None, local_warnings
+
+        if len(model_files) == 1 and len(params_files) == 1:
+            return model_files[0].name, params_files[0].name, local_warnings
+
+        model_stems = {m.stem: m for m in model_files}
+        params_stems = {p.stem: p for p in params_files}
+        shared = sorted(set(model_stems.keys()) & set(params_stems.keys()))
+        if shared:
+            stem = shared[0]
+            local_warnings.append(f"multiple model files found; selected stem '{stem}'")
+            return model_stems[stem].name, params_stems[stem].name, local_warnings
+
+        local_warnings.append("multiple model/params files found; using first files")
+        return model_files[0].name, params_files[0].name, local_warnings
 
     model_files = sorted(path_obj.glob("*.pdmodel"))
     params_files = sorted(path_obj.glob("*.pdiparams"))
+    model_filename, params_filename, local_warnings = select_model_pair(path_obj, model_files, params_files)
+    warnings.extend(local_warnings)
+    if model_filename is not None and params_filename is not None:
+        return str(path_obj), model_filename, params_filename, warnings
 
-    if not model_files:
-        warnings.append("no .pdmodel file found")
-        return None, None, warnings
-    if not params_files:
-        warnings.append("no .pdiparams file found")
-        return None, None, warnings
+    # Fallback: recursively search for inference files under model_dir.
+    candidate_pairs: List[Tuple[pathlib.Path, str, str]] = []
+    for candidate_dir in sorted({p.parent for p in path_obj.rglob("*.pdmodel")}):
+        candidate_model_files = sorted(candidate_dir.glob("*.pdmodel"))
+        candidate_params_files = sorted(candidate_dir.glob("*.pdiparams"))
+        c_model_filename, c_params_filename, _ = select_model_pair(candidate_dir, candidate_model_files, candidate_params_files)
+        if c_model_filename is not None and c_params_filename is not None:
+            candidate_pairs.append((candidate_dir, c_model_filename, c_params_filename))
 
-    if len(model_files) == 1 and len(params_files) == 1:
-        return model_files[0].name, params_files[0].name, warnings
+    if not candidate_pairs:
+        return None, None, None, warnings
 
-    model_stems = {m.stem: m for m in model_files}
-    params_stems = {p.stem: p for p in params_files}
-    shared = sorted(set(model_stems.keys()) & set(params_stems.keys()))
-    if shared:
-        stem = shared[0]
-        warnings.append(f"multiple model files found; selected stem '{stem}'")
-        return model_stems[stem].name, params_stems[stem].name, warnings
-
-    warnings.append("multiple model/params files found; using first files")
-    return model_files[0].name, params_files[0].name, warnings
+    candidate_pairs.sort(key=lambda t: len(t[0].parts))
+    selected_dir, selected_model, selected_params = candidate_pairs[0]
+    warnings.append(f"inference files found in nested directory; using '{selected_dir}'")
+    return str(selected_dir), selected_model, selected_params, warnings
 
 
 def call_with_supported_kwargs(func: Any, kwargs: Dict[str, Any]) -> Any:
@@ -228,10 +252,10 @@ def main() -> int:
             "status": "pending",
             "warnings": [],
         }
-        model_filename, params_filename, detect_warnings = detect_model_and_params(spec.model_dir)
+        resolved_model_dir, model_filename, params_filename, detect_warnings = detect_model_and_params(spec.model_dir)
         item["warnings"].extend(detect_warnings)
 
-        if model_filename is None or params_filename is None:
+        if resolved_model_dir is None or model_filename is None or params_filename is None:
             item["status"] = "skipped"
             item["reason"] = "model files not detected"
             summary["failed"] += 1
@@ -242,7 +266,7 @@ def main() -> int:
         save_dir.mkdir(parents=True, exist_ok=True)
 
         ok, backend = quantize_dynamic(
-            model_dir=spec.model_dir,
+            model_dir=resolved_model_dir,
             save_dir=str(save_dir),
             model_filename=model_filename,
             params_filename=params_filename,
@@ -250,6 +274,7 @@ def main() -> int:
             quantizable_op_type=quant_ops,
         )
 
+        item["resolved_model_dir"] = resolved_model_dir
         item["output_dir"] = str(save_dir)
         item["model_filename"] = model_filename
         item["params_filename"] = params_filename
