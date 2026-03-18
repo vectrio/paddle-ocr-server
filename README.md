@@ -22,7 +22,8 @@ The script is safe to run multiple times.
 - Gateway behavior:
   - forwards requests to workers using round-robin selection
   - enforces bounded in-flight request limits (`MAX_IN_FLIGHT`)
-  - returns `429` when the queue wait timeout is exceeded
+  - waits by default when queue is full (`QUEUE_WAIT_TIMEOUT_SECONDS=0`)
+  - returns `429` only when `QUEUE_WAIT_TIMEOUT_SECONDS` is set to a positive value and that wait timeout is exceeded
   - returns `503` when no worker can be reached
 
 ## Prerequisites
@@ -98,3 +99,45 @@ tmux capture-pane -pt cloudflare-tunnel | grep -Eo 'https://[-a-zA-Z0-9]+\.trycl
 - Scale worker count conservatively on a single GPU to avoid OOM.
 - To avoid `429 Too Many Requests`, keep `QUEUE_WAIT_TIMEOUT_SECONDS=0`.
 - Set `QUEUE_WAIT_TIMEOUT_SECONDS` to a positive value only if you prefer bounded wait and overload rejections.
+
+## Quantize PPStructureV3 Sub-Modules
+
+You can generate quantized inference models for PPStructureV3 sub-modules that have local `model_dir` paths.
+
+Run:
+
+```bash
+chmod +x quantize.sh
+./quantize.sh
+```
+
+Defaults:
+
+- `CONFIG_PATH=./PP-StructureV3.yaml`
+- `OUTPUT_ROOT=./quantized-models`
+- `WEIGHT_BITS=8`
+- `QUANT_OPS=conv2d,depthwise_conv2d,mul,matmul`
+
+Optional examples:
+
+```bash
+export OUTPUT_ROOT=./quantized-models-int8
+export WEIGHT_BITS=8
+./quantize.sh
+```
+
+Quantize extra local model directories not listed in YAML:
+
+```bash
+export EXTRA_MODEL_DIRS=/path/modelA,/path/modelB
+./quantize.sh
+```
+
+Result summary is written to:
+
+- `quantized-models/quantization_summary.json` (or your custom `OUTPUT_ROOT`)
+
+Notes:
+
+- Modules with `model_dir: null` are skipped because they do not point to local inference model files.
+- This script performs dynamic post-training quantization and outputs separate quantized model folders.
